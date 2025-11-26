@@ -1,34 +1,45 @@
-/*********************************************************************
-* Filename:   sha256.c
-* Author:     Brad Conte (brad AT bradconte.com)
-* Copyright:
-* Disclaimer: This code is presented "as is" without any guarantees.
-* Details:    Implementation of the SHA-256 hashing algorithm.
-              SHA-256 is one of the three algorithms in the SHA2
-              specification. The others, SHA-384 and SHA-512, are not
-              offered in this implementation.
-              Algorithm specification can be found here:
-               * http://csrc.nist.gov/publications/fips/fips180-2/fips180-2withchangenotice.pdf
-              This implementation uses little endian byte order.
-*********************************************************************/
-
 /*************************** HEADER FILES ***************************/
 #include <stdlib.h>
 #include <memory.h>
 #include "sha256.h"
 
 /****************************** MACROS ******************************/
+/*
+ * ROTLEFT / ROTRIGHT
+ * -----------------
+ * Функции побитового сдвига (роллинг):
+ * ROTLEFT(a, b)  - сдвиг влево на b битов с циклическим переносом.
+ * ROTRIGHT(a, b) - сдвиг вправо на b битов с циклическим переносом.
+ */
 #define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
 #define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
 
+/*
+ * CH / MAJ
+ * --------
+ * Основные логические функции для SHA-256:
+ * CH(x,y,z)  = (x AND y) XOR (~x AND z)  — выбор битов на основе x.
+ * MAJ(x,y,z) = (x AND y) XOR (x AND z) XOR (y AND z) — большинство среди x, y, z.
+ */
 #define CH(x,y,z) (((x) & (y)) ^ (~(x) & (z)))
 #define MAJ(x,y,z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+
+/*
+ * EP0 / EP1 / SIG0 / SIG1
+ * -----------------------
+ * SHA-256 функции сжатия:
+ * EP0(x) и EP1(x) — большие сигма-функции (σ0, σ1).
+ * SIG0(x) и SIG1(x) — малые сигма-функции (σ0', σ1').
+ */
 #define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
 #define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
 #define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
 #define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
 
 /**************************** VARIABLES *****************************/
+/*
+ * k - константы SHA-256, 64 слова по 32 бита, используемые на каждом раунде сжатия.
+ */
 static const WORD k[64] = {
 	0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
 	0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
@@ -41,15 +52,27 @@ static const WORD k[64] = {
 };
 
 /*********************** FUNCTION DEFINITIONS ***********************/
+
+/**
+ * sha256_transform - основной цикл сжатия SHA-256
+ * @ctx: указатель на контекст хэширования
+ * @data: массив данных длиной 64 байта (512 бит)
+ *
+ * Функция обрабатывает один блок данных (512 бит), обновляя состояние ctx->state.
+ */
 void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
 {
 	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, m[64];
 
+	// Подготовка сообщения: 16 слов по 32 бита из входного блока
 	for (i = 0, j = 0; i < 16; ++i, j += 4)
 		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
+
+	// Расширение сообщения до 64 слов
 	for ( ; i < 64; ++i)
 		m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
 
+	// Инициализация рабочих переменных
 	a = ctx->state[0];
 	b = ctx->state[1];
 	c = ctx->state[2];
@@ -59,6 +82,7 @@ void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
 	g = ctx->state[6];
 	h = ctx->state[7];
 
+	// Основной цикл 64 раундов
 	for (i = 0; i < 64; ++i) {
 		t1 = h + EP1(e) + CH(e,f,g) + k[i] + m[i];
 		t2 = EP0(a) + MAJ(a,b,c);
@@ -72,6 +96,7 @@ void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
 		a = t1 + t2;
 	}
 
+	// Добавление результатов работы к состоянию
 	ctx->state[0] += a;
 	ctx->state[1] += b;
 	ctx->state[2] += c;
@@ -82,6 +107,12 @@ void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
 	ctx->state[7] += h;
 }
 
+/**
+ * sha256_init - инициализация контекста SHA-256
+ * @ctx: указатель на контекст
+ *
+ * Устанавливает начальные значения состояния и счетчиков.
+ */
 void sha256_init(SHA256_CTX *ctx)
 {
 	ctx->datalen = 0;
@@ -96,6 +127,15 @@ void sha256_init(SHA256_CTX *ctx)
 	ctx->state[7] = 0x5be0cd19;
 }
 
+/**
+ * sha256_update - обновление хэш-состояния новыми данными
+ * @ctx: указатель на контекст
+ * @data: входной массив данных
+ * @len: длина данных в байтах
+ *
+ * Функция добавляет данные в буфер и вызывает sha256_transform
+ * для каждого полного блока 64 байта.
+ */
 void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len)
 {
 	WORD i;
@@ -105,23 +145,31 @@ void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len)
 		ctx->datalen++;
 		if (ctx->datalen == 64) {
 			sha256_transform(ctx, ctx->data);
-			ctx->bitlen += 512;
+			ctx->bitlen += 512; // увеличиваем длину сообщения в битах
 			ctx->datalen = 0;
 		}
 	}
 }
 
+/**
+ * sha256_final - завершение хэширования и получение результата
+ * @ctx: указатель на контекст
+ * @hash: массив для хранения итогового хэша (32 байта)
+ *
+ * Функция выполняет дополнение сообщения, добавляет длину и
+ * вычисляет окончательный хэш.
+ */
 void sha256_final(SHA256_CTX *ctx, BYTE hash[])
 {
 	WORD i;
 
 	i = ctx->datalen;
 
-	// Pad whatever data is left in the buffer.
+	// Дополнение сообщения
 	if (ctx->datalen < 56) {
-		ctx->data[i++] = 0x80;
+		ctx->data[i++] = 0x80; // добавляем 1 бит
 		while (i < 56)
-			ctx->data[i++] = 0x00;
+			ctx->data[i++] = 0x00; // заполняем нулями
 	}
 	else {
 		ctx->data[i++] = 0x80;
@@ -131,7 +179,7 @@ void sha256_final(SHA256_CTX *ctx, BYTE hash[])
 		memset(ctx->data, 0, 56);
 	}
 
-	// Append to the padding the total message's length in bits and transform.
+	// Добавление длины исходного сообщения в битах
 	ctx->bitlen += ctx->datalen * 8;
 	ctx->data[63] = ctx->bitlen;
 	ctx->data[62] = ctx->bitlen >> 8;
@@ -143,8 +191,7 @@ void sha256_final(SHA256_CTX *ctx, BYTE hash[])
 	ctx->data[56] = ctx->bitlen >> 56;
 	sha256_transform(ctx, ctx->data);
 
-	// Since this implementation uses little endian byte ordering and SHA uses big endian,
-	// reverse all the bytes when copying the final state to the output hash.
+	// Конвертация состояния в массив байт (big-endian)
 	for (i = 0; i < 4; ++i) {
 		hash[i]      = (ctx->state[0] >> (24 - i * 8)) & 0x000000ff;
 		hash[i + 4]  = (ctx->state[1] >> (24 - i * 8)) & 0x000000ff;
