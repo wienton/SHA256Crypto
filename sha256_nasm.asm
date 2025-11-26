@@ -13,11 +13,6 @@
 ;   • Защиту от side-channel атак.
 ;   • Полное стирание чувствительных данных после использования.
 ;
-; @section   compatibility Совместимость
-; - Точно соответствует C-интерфейсу: extern void between_keys_sha256(const unsigned char*, size_t, unsigned char*);
-; - Работает с OpenSSL, hiredis, и всей вашей C-логикой без изменений.
-; - Требует: nasm, x86-64 Linux (System V ABI).
-;
 ; @section   security Уровень безопасности
 ; - Constant-time: без ветвлений по данным.
 ; - Memory Sentinel: уникальный механизм защиты от утечек памяти (см. ниже).
@@ -26,8 +21,7 @@
 ;
 ; @section   build Компиляция
 ; @code
-; nasm -f elf64 between_keys_sha256.asm -o between_keys_sha256.o
-; gcc garant_core.c between_keys_sha256.o -lhiredis -lcrypto -o garant_core
+; nasm -f elf64 sha256_nasm.asm -o sha256_nasm.o
 ; @endcode
 ;
 ; @section   memory_sentinel WIENTON Memory Sentinel (Уникальная технология)
@@ -70,9 +64,6 @@ INIT_HASH:
 section .text
     global between_keys_sha256
 
-; ==================================================================================================
-; %define WIENTON_DEBUG 1   ; Раскомментируйте для отладки (вывод в stderr через sys_write)
-; ==================================================================================================
 
 ; --------------------------------------------------------------------------------------------------
 ; Макросы криптографических примитивов — оптимизированы под x86-64 pipeline
