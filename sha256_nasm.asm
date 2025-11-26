@@ -234,7 +234,10 @@ between_keys_sha256:
     jge .finalize_memory        ; если да — переходим к завершению
 
     ; Загружаем текущий блок (64 байта) в W[0..15] (конвертируя в big-endian)
-    lea rsi, [rbp - 256 + r15*64]  ; rsi = начало текущего блока
+    mov rax, r15
+    shl rax, 6           ; rax = r15*64
+    lea rsi, [rbp - 256 + rax]
+
     lea rdi, [rbp - 256]        ; rdi = начало W-буфера
     mov r12, 0                  ; r12 = счётчик слов (0..15)
 
