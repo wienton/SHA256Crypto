@@ -128,4 +128,4 @@ between_keys_sha256:
     mov %r15d, %eax        # h
     mov %r12d, %edx
     call Sigma1_uint32
-    add %eax, %eax         # ошибка! исправим ниже через макросы
+    add %eax, %eax         
